@@ -991,6 +991,24 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .tip-body .tip-icon { font-size: 14px; margin-top: 2px; flex-shrink: 0; }
 .tip-body .tip-warn { color: #f87171; font-weight: 700; }
 </style>
+  <script>
+    // EmailJS بدون SDK - استدعاء مباشر عبر fetch
+    window.emailjsSend = function(serviceId, templateId, params, publicKey){
+      return fetch('https://api.emailjs.com/api/v1.0/email/send', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          service_id: serviceId,
+          template_id: templateId,
+          user_id: publicKey,
+          template_params: params
+        })
+      }).then(res => {
+        if(!res.ok) return res.text().then(t => Promise.reject({status: res.status, text: t}));
+        return res;
+      });
+    };
+  </script>
 </head>
 <body>
 <div class="wrap">
@@ -1149,8 +1167,21 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
     <!-- ① كلمة المرور -->
     <div class="setting-section">
-      <div class="setting-section-title">🔒 كلمة مرور الحذف</div>
+      <div class="setting-section-title">🔒 كلمة مرور الحماية</div>
       <div class="setting-row" style="flex-direction:column;gap:10px;align-items:stretch;">
+        <!-- حقل الإيميل — يظهر فقط إذا لم يكن مسجلاً -->
+        <div id="email_input_row">
+          <div style="font-family:'Tajawal',sans-serif;font-size:11px;color:var(--muted);margin-bottom:6px;">البريد الإلكتروني (لاسترجاع كلمة المرور)</div>
+          <input class="setting-input" type="email" id="set_email"
+            placeholder="example@email.com"
+            autocomplete="email"
+            style="width:100%;letter-spacing:0;direction:ltr;text-align:left;">
+        </div>
+        <!-- مؤشر الإيميل المسجل -->
+        <div id="email_saved_row" style="display:none;">
+          <div style="font-family:'Tajawal',sans-serif;font-size:12px;color:#4ade80;margin-bottom:4px;">📧 البريد الإلكتروني مسجل ✓</div>
+          <button onclick="changeEmail()" style="background:none;border:none;color:var(--muted);font-family:'Tajawal',sans-serif;font-size:11px;cursor:pointer;text-decoration:underline;">تغيير البريد</button>
+        </div>
         <!-- حقل كلمة المرور القديمة — يظهر فقط إذا كانت مضبوطة -->
         <div id="old_pwd_row" style="display:none;">
           <div style="font-family:'Tajawal',sans-serif;font-size:11px;color:var(--muted);margin-bottom:6px;">لتغيير كلمة المرور أدخل القديمة أولاً</div>
@@ -1230,6 +1261,9 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <div class="reset-btns">
       <button class="reset-confirm-btn" onclick="confirmTogglePwd()">تأكيد</button>
       <button class="reset-cancel-btn" onclick="cancelTogglePwd()">إلغاء</button>
+    </div>
+    <div style="margin-top:12px;">
+      <button onclick="cancelTogglePwd();showForgotPwd();" style="background:none;border:none;color:var(--gold);font-family:'Tajawal',sans-serif;font-size:13px;cursor:pointer;text-decoration:underline;">نسيت كلمة المرور؟</button>
     </div>
   </div>
 </div>
@@ -1530,6 +1564,45 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
       <button class="pwd-confirm" onclick="pwdConfirm()">حذف</button>
       <button class="pwd-cancel" onclick="pwdCancel()">إلغاء</button>
     </div>
+    <div style="margin-top:12px;">
+      <button onclick="showForgotPwd()" style="background:none;border:none;color:var(--gold);font-family:'Tajawal',sans-serif;font-size:13px;cursor:pointer;text-decoration:underline;">نسيت كلمة المرور؟</button>
+    </div>
+  </div>
+</div>
+
+<!-- نافذة نسيت كلمة المرور -->
+<div class="pwd-overlay" id="forgot_overlay">
+  <div class="pwd-box" style="width:88%;max-width:340px;">
+    <div class="pwd-title" id="forgot_title">📧 استرجاع كلمة المرور</div>
+    <!-- مرحلة ١: إدخال الإيميل -->
+    <div id="forgot_step1">
+      <div style="font-family:'Tajawal',sans-serif;font-size:12px;color:var(--muted);margin-bottom:10px;">أدخل البريد الإلكتروني المسجل</div>
+      <input class="pwd-inp" type="email" id="forgot_email" placeholder="example@email.com" style="letter-spacing:0;direction:ltr;font-size:15px;">
+      <div class="pwd-btns" style="margin-top:10px;">
+        <button class="pwd-confirm" onclick="sendResetCode()">إرسال الكود</button>
+        <button class="pwd-cancel" onclick="closeForgotPwd()">إلغاء</button>
+      </div>
+    </div>
+    <!-- مرحلة ٢: إدخال الكود -->
+    <div id="forgot_step2" style="display:none;">
+      <div style="font-family:'Tajawal',sans-serif;font-size:12px;color:var(--muted);margin-bottom:10px;">أدخل الكود المرسل لبريدك</div>
+      <input class="pwd-inp" type="text" id="forgot_code" placeholder="______" maxlength="6" style="letter-spacing:8px;font-size:22px;">
+      <div style="font-family:'Tajawal',sans-serif;font-size:11px;color:var(--muted);margin:6px 0 10px;">صالح لمدة ١٠ دقائق</div>
+      <div class="pwd-btns">
+        <button class="pwd-confirm" onclick="verifyResetCode()">تحقق</button>
+        <button class="pwd-cancel" onclick="closeForgotPwd()">إلغاء</button>
+      </div>
+    </div>
+    <!-- مرحلة ٣: تعيين كلمة مرور جديدة -->
+    <div id="forgot_step3" style="display:none;">
+      <div style="font-family:'Tajawal',sans-serif;font-size:12px;color:var(--muted);margin-bottom:10px;">أدخل كلمة مرور جديدة</div>
+      <input class="pwd-inp" type="password" id="forgot_newpwd" placeholder="••••" maxlength="20" style="margin-bottom:8px;">
+      <input class="pwd-inp" type="password" id="forgot_newpwd2" placeholder="تأكيد كلمة المرور" maxlength="20">
+      <div class="pwd-btns" style="margin-top:10px;">
+        <button class="pwd-confirm" onclick="confirmNewPwd()">حفظ</button>
+        <button class="pwd-cancel" onclick="closeForgotPwd()">إلغاء</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1550,9 +1623,15 @@ let HT_HIND=[
 const DEFAULT_HT_HIND = JSON.parse(JSON.stringify(HT_HIND));
 const DEFAULT_ROUNDS = 9;
 const DEFAULT_PWD = ''; // كلمة المرور الافتراضية فارغة
+const EMAILJS_SERVICE  = 'service_y4tq1nm';
+const EMAILJS_TEMPLATE = 'template_5j3qaua';
+const EMAILJS_PUBLIC   = 'mItlnIqE6WGqQ3L7e';
 const PLAYERS=["اللاعب الأول","اللاعب الثاني","اللاعب الثالث","اللاعب الرابع"];
 let N_ROUNDS=9;
 let APP_PWD='';
+let APP_EMAIL='';
+let _resetCode=null;
+let _resetCodeExpiry=null;
 const state=[];
 const PENALTY_VALUES=[100,200,400,600,800,1000,1200,1400,1600,1800,2000,2200,2400];
 const penalties=[];
@@ -1615,6 +1694,24 @@ function cumWithPenalty(upToRow){
     for(let p=0;p<4;p++){const pt=penaltySum(p,r)-(r>0?penaltySum(p,r-1):0);cum[p]+=pt;}
   }
   return cum;
+}
+
+function allPlayersNamed(){
+  return [0,1,2,3].every(i=>{
+    const el=document.getElementById(`pname_${i}`);
+    return el && el.value.trim().length>0;
+  });
+}
+
+function lockPlayerNames(){
+  // إذا بدأت الجولة الأولى تُقفل حقول الأسماء
+  const firstStarted = state[0] &&
+    (state[0].winner!==null && state[0].winner!==undefined ||
+     state[0].hind!==null && state[0].hind!==undefined);
+  [0,1,2,3].forEach(i=>{
+    const el=document.getElementById(`pname_${i}`);
+    if(el) el.disabled = !!firstStarted;
+  });
 }
 
 function updateFrom(start){
@@ -1697,7 +1794,16 @@ function buildTable(){
     sw.className='ht-sel sel-winner'; sw.id=`w_${r}`;
     sw.innerHTML='<option value="">—</option>'+[0,1,2,3].map(i=>`<option value="${i}">${getPlayerName(i)}</option>`).join('');
     sw.addEventListener('change',()=>{
+      if(!allPlayersNamed()){showToast('⚠️ أدخل أسماء اللاعبين الأربعة أولاً');sw.value='';return;}
+      // لا يُقبل إدخال جولة قبل اكتمال الجولة السابقة
+      if(r>0){
+        const prev=state[r-1];
+        if(prev.winner===null||prev.winner===undefined||prev.hind===null||prev.hind===undefined){
+          showToast('⚠️ أكمل الجولة ' + toAr(r) + ' أولاً');sw.value='';return;
+        }
+      }
       state[r].winner=sw.value===''?null:+sw.value;
+      lockPlayerNames();
       updateHandSel(r);
       updateFrom(r);
     });
@@ -1705,7 +1811,16 @@ function buildTable(){
 
     const ch=document.createElement('div'); ch.className='ht-cell-sel';
     const sh=makeSel(`h_${r}`,HT_HIND.map(h=>h.name),'sel-hind',()=>{
+      if(!allPlayersNamed()){showToast('⚠️ أدخل أسماء اللاعبين الأربعة أولاً');sh.value='';return;}
+      // لا يُقبل إدخال جولة قبل اكتمال الجولة السابقة
+      if(r>0){
+        const prev=state[r-1];
+        if(prev.winner===null||prev.winner===undefined||prev.hind===null||prev.hind===undefined){
+          showToast('⚠️ أكمل الجولة ' + toAr(r) + ' أولاً');sh.value='';return;
+        }
+      }
       state[r].hind=sh.value===''?null:+sh.value;
+      lockPlayerNames();
       updateHandSel(r);
       updateFrom(r);
     });
@@ -1906,24 +2021,56 @@ function saveSessions(arr){
 }
 
 function saveSession(){
-  // التحقق: لا يجوز حفظ جولة في منتصفها
-  let hasCompleted = false;
+  // التحقق: يجب اكتمال جميع الجولات قبل الحفظ
   for(let r=0;r<N_ROUNDS;r++){
-    const{hind,winner}=state[r];
+    const s=state[r];
+    const hind = s ? s.hind : undefined;
+    const winner = s ? s.winner : undefined;
     const hasHind = hind!==null && hind!==undefined;
     const hasWinner = winner!==null && winner!==undefined;
-    if(hasHind && !hasWinner){
-      showToast('⚠️ حدد الفائز في الجولة ' + toAr(r+1) + ' قبل الحفظ');
+    if(!hasHind || !hasWinner){
+      showToast('⚠️ أكمل جميع الجولات حتى الجولة ' + toAr(N_ROUNDS) + ' للحفظ');
       return;
     }
-    if(!hasHind && hasWinner){
-      showToast('⚠️ حدد نوع الهند في الجولة ' + toAr(r+1) + ' قبل الحفظ');
-      return;
-    }
-    if(hasHind && hasWinner) hasCompleted = true;
   }
-  if(!hasCompleted){
-    showToast('⚠️ لا توجد جولة مكتملة للحفظ');
+
+  // التحقق: في الجولة الأخيرة، الفائز (صاحب أقل نقاط بعد ٨ جولات) يجب أن يكون هو من فاز بالهاند
+  if(N_ROUNDS >= 2){
+    const cumBefore = cumWithPenalty(N_ROUNDS - 2); // النقاط بعد الجولة 8
+    const {sorted: sortedBefore} = getStableRanks(N_ROUNDS - 2);
+    const leaderBefore = sortedBefore[0]; // الفائز الحالي قبل الجولة الأخيرة
+    const lastWinner = state[N_ROUNDS - 1].winner; // من فاز بالجولة الأخيرة
+    if(lastWinner !== leaderBefore){
+      showToast('⚠️ تُعاد الجولة — ' + getPlayerName(lastWinner) + ' لم يتفوق على المركز الأول');
+      // إعادة الجولة الأخيرة
+      const lastR = N_ROUNDS - 1;
+      state[lastR] = {winner:null, hind:null, hand:null};
+      const sw = document.getElementById(`w_${lastR}`);
+      const sh = document.getElementById(`h_${lastR}`);
+      const sy = document.getElementById(`hy_${lastR}`);
+      if(sw) sw.value = '';
+      if(sh) sh.value = '';
+      if(sy) sy.value = '';
+      updateFrom(lastR);
+      return;
+    }
+  }
+
+  // التحقق: منع الحفظ المكرر بنفس النتائج
+  const currentScores = cumWithPenalty(N_ROUNDS - 1);
+  const currentNames = [0,1,2,3].map(i=>{
+    const el = document.getElementById(`pname_${i}`);
+    return el ? el.value.trim() : '';
+  });
+  const existingSessions = getSessions();
+  const isDuplicate = existingSessions.some(s => {
+    if(!s.finalScores || !s.playerNames) return false;
+    const sameNames = s.playerNames.every((n,i) => n === (currentNames[i] || PLAYERS[i]));
+    const sameScores = s.finalScores.every((v,i) => v === currentScores[i]);
+    return sameNames && sameScores;
+  });
+  if(isDuplicate){
+    showToast('⚠️ هذه الجلسة محفوظة مسبقاً');
     return;
   }
 
@@ -2041,6 +2188,87 @@ function deletePenalty(id){
   setTimeout(()=>inp.focus(),100);
 }
 
+/* ══ FORGOT PASSWORD ══ */
+function changeEmail(){
+  APP_EMAIL='';
+  saveAppSettings();
+  const emailInputRow = document.getElementById('email_input_row');
+  const emailSavedRow = document.getElementById('email_saved_row');
+  const emailEl = document.getElementById('set_email');
+  if(emailInputRow) emailInputRow.style.display='block';
+  if(emailSavedRow) emailSavedRow.style.display='none';
+  if(emailEl){ emailEl.value=''; emailEl.focus(); }
+}
+
+function showForgotPwd(){
+  if(!APP_EMAIL){ showToast('⚠️ لم يتم تسجيل بريد إلكتروني — راجع الإعدادات'); return; }
+  document.getElementById('pwd_overlay').classList.remove('show');
+  document.getElementById('forgot_overlay').classList.add('show');
+  document.getElementById('forgot_step1').style.display='block';
+  document.getElementById('forgot_step2').style.display='none';
+  document.getElementById('forgot_step3').style.display='none';
+  document.getElementById('forgot_email').value='';
+  document.getElementById('forgot_title').textContent='📧 استرجاع كلمة المرور';
+  setTimeout(()=>document.getElementById('forgot_email').focus(),200);
+}
+
+function closeForgotPwd(){
+  document.getElementById('forgot_overlay').classList.remove('show');
+  _resetCode=null; _resetCodeExpiry=null;
+}
+
+function sendResetCode(){
+  const email = document.getElementById('forgot_email').value.trim();
+  if(!email){ showToast('⚠️ أدخل البريد الإلكتروني'); return; }
+  if(email !== APP_EMAIL){ showToast('❌ البريد غير مطابق للمسجل'); return; }
+  // توليد كود 6 أرقام
+  _resetCode = String(Math.floor(100000 + Math.random()*900000));
+  _resetCodeExpiry = Date.now() + 10*60*1000; // 10 دقائق
+  // إرسال عبر EmailJS API مباشرة
+  showToast('⏳ جاري الإرسال...');
+  window.emailjsSend(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
+    to_email: email,
+    code: _resetCode
+  }, EMAILJS_PUBLIC).then(()=>{
+    showToast('✅ تم إرسال الكود لبريدك');
+    document.getElementById('forgot_step1').style.display='none';
+    document.getElementById('forgot_step2').style.display='block';
+    document.getElementById('forgot_title').textContent='🔑 أدخل كود التحقق';
+    setTimeout(()=>document.getElementById('forgot_code').focus(),200);
+  }).catch((err)=>{
+    console.error('EmailJS full error:', JSON.stringify(err), 'status:', err.status, 'text:', err.text);
+    alert('خطأ تفصيلي: status=' + err.status + ' text=' + err.text);
+    _resetCode=null; _resetCodeExpiry=null;
+  });
+}
+
+function verifyResetCode(){
+  const entered = document.getElementById('forgot_code').value.trim();
+  if(!_resetCode || Date.now() > _resetCodeExpiry){
+    showToast('❌ انتهت صلاحية الكود — أعد المحاولة');
+    closeForgotPwd(); return;
+  }
+  if(entered !== _resetCode){ showToast('❌ الكود غير صحيح'); return; }
+  // الكود صحيح — انتقل لتعيين كلمة مرور جديدة
+  document.getElementById('forgot_step2').style.display='none';
+  document.getElementById('forgot_step3').style.display='block';
+  document.getElementById('forgot_title').textContent='🔒 كلمة مرور جديدة';
+  document.getElementById('forgot_newpwd').value='';
+  document.getElementById('forgot_newpwd2').value='';
+  setTimeout(()=>document.getElementById('forgot_newpwd').focus(),200);
+}
+
+function confirmNewPwd(){
+  const p1 = document.getElementById('forgot_newpwd').value;
+  const p2 = document.getElementById('forgot_newpwd2').value;
+  if(p1.length < 3){ showToast('❌ كلمة المرور يجب أن تكون ٣ أحرف على الأقل'); return; }
+  if(p1 !== p2){ showToast('❌ كلمتا المرور غير متطابقتين'); return; }
+  APP_PWD = p1;
+  saveAppSettings();
+  closeForgotPwd();
+  showToast('✅ تم تغيير كلمة المرور بنجاح');
+}
+
 function pwdConfirm(){
   const inp=document.getElementById('pwd_inp');
   if(inp.value===APP_PWD){
@@ -2118,7 +2346,7 @@ function resetAll(){
     document.querySelector(`.ht-row[data-r="${r}"]`).classList.remove('filled');
   }
   penalties.length=0; renderPenalties(); renderRanks(); renderHandCards();
-  for(let i=0;i<4;i++){const el=document.getElementById(`pname_${i}`);if(el)el.value='';}
+  for(let i=0;i<4;i++){const el=document.getElementById(`pname_${i}`);if(el){el.value='';el.disabled=false;}}
   showToast('🗑️ تم مسح الكل');
 }
 
@@ -2279,24 +2507,19 @@ function loadAppSettings(){
     const raw = localStorage.getItem(SETTINGS_KEY);
     const s = raw ? JSON.parse(raw) : {};
     if(s.rounds && s.rounds >= 1 && s.rounds <= 30) N_ROUNDS = s.rounds;
-    // كلمة المرور لا تُحمَّل أبداً — دائماً فارغة عند التشغيل
-    APP_PWD = '';
+    // تحميل كلمة المرور والإيميل
+    APP_PWD = s.pwd || '';
+    APP_EMAIL = s.email || '';
     if(s.hindList && s.hindList.length){
       HT_HIND.length = 0;
       s.hindList.forEach(h => HT_HIND.push(h));
-    }
-    // مسح pwd من localStorage إذا وُجد
-    if(s.pwd !== undefined){
-      delete s.pwd;
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
     }
   }catch(e){}
 }
 
 function saveAppSettings(){
   try{
-    // لا نحفظ كلمة المرور في localStorage أبداً
-    const obj={rounds:N_ROUNDS, hindList:HT_HIND};
+    const obj={rounds:N_ROUNDS, hindList:HT_HIND, pwd:APP_PWD, email:APP_EMAIL};
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(obj));
   }catch(e){}
 }
@@ -2345,6 +2568,19 @@ function loadSettingsUI(){
     el.value = el.dataset.placeholder;
     el.style.color = 'var(--muted)';
   });
+  // تحميل الإيميل المسجل
+  const emailEl = document.getElementById('set_email');
+  const emailInputRow = document.getElementById('email_input_row');
+  const emailSavedRow = document.getElementById('email_saved_row');
+  if(APP_EMAIL){
+    if(emailInputRow) emailInputRow.style.display='none';
+    if(emailSavedRow) emailSavedRow.style.display='block';
+    if(emailEl) emailEl.value = APP_EMAIL;
+  } else {
+    if(emailInputRow) emailInputRow.style.display='block';
+    if(emailSavedRow) emailSavedRow.style.display='none';
+    if(emailEl) emailEl.value='';
+  }
   // أظهر حقل كلمة المرور القديمة فقط إذا كانت مضبوطة
   const oldRow = document.getElementById('old_pwd_row');
   if(oldRow) oldRow.style.display = APP_PWD ? 'block' : 'none';
@@ -2575,6 +2811,23 @@ function saveSettings(){
       }
     }
     APP_PWD = p1;
+  }
+
+  // حفظ الإيميل
+  const emailEl = document.getElementById('set_email');
+  if(emailEl){
+    const newEmail = emailEl.value.trim();
+    if(newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)){
+      showToast('❌ البريد الإلكتروني غير صحيح'); return;
+    }
+    if(newEmail) APP_EMAIL = newEmail;
+  }
+  // تحديث واجهة الإيميل
+  const emailInputRow = document.getElementById('email_input_row');
+  const emailSavedRow = document.getElementById('email_saved_row');
+  if(APP_EMAIL){
+    if(emailInputRow) emailInputRow.style.display='none';
+    if(emailSavedRow) emailSavedRow.style.display='block';
   }
 
   // ④ تطبيق عدد الجولات
@@ -2948,6 +3201,7 @@ function toggleInfoSec(toggleEl){
 /* ══ INIT ══ */
 loadAppSettings();
 buildTable(); renderPenalties(); renderRanks(); renderHandCards(); renderSessionList(); renderTop3();
+lockPlayerNames();
 // تاريخ الجولة - عرض نصي
 (function(){
   const d=new Date();
@@ -2964,6 +3218,29 @@ updateHcHeaders();
 [0,1,2,3].forEach(p=>{
   const el=document.getElementById(`pname_${p}`);
   if(el) el.addEventListener('input',()=>{
+    // لا يُقبل تغيير الاسم إذا بدأت الجولة الأولى
+    const firstStarted = state[0] &&
+      (state[0].winner!==null && state[0].winner!==undefined ||
+       state[0].hind!==null && state[0].hind!==undefined);
+    if(firstStarted){
+      showToast('⚠️ لا يمكن تغيير الأسماء بعد بدء اللعبة');
+      el.value = el.dataset.locked||el.value;
+      return;
+    }
+    // التحقق من الأسماء المكررة
+    const currentName = el.value.trim();
+    if(currentName){
+      const isDuplicate = [0,1,2,3].some(i=>{
+        if(i===p) return false;
+        const other=document.getElementById(`pname_${i}`);
+        return other && other.value.trim() === currentName;
+      });
+      if(isDuplicate){
+        showToast('⚠️ الاسم مكرر — اختر اسماً مختلفاً');
+        el.value='';
+        return;
+      }
+    }
     updateHcHeaders();
     renderPenalties();
     for(let r=0;r<N_ROUNDS;r++){
